@@ -52,6 +52,7 @@ type KanikoOptions struct {
 	Cleanup                 bool
 	InsecureRegistries      multiArg
 	SkipTLSVerifyRegistries multiArg
+	RegistryTLS             multiArg
 }
 
 // WarmerOptions are options that are set by command line arguments to the cache warmer.

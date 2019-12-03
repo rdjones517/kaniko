@@ -19,8 +19,10 @@ package executor
 import (
 	"crypto/tls"
 	"encoding/json"
+	"encoding/csv"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -231,12 +233,48 @@ func writeImageOutputs(image v1.Image, destRefs []name.Tag) error {
 func makeTransport(opts *config.KanikoOptions, registryName string) http.RoundTripper {
 	// Create a transport to set our user-agent.
 	tr := http.DefaultTransport
+	toAdd := false
+	cfg := &tls.Config{}
+
 	if opts.SkipTLSVerify || opts.SkipTLSVerifyRegistries.Contains(registryName) {
-		tr.(*http.Transport).TLSClientConfig = &tls.Config{
-			InsecureSkipVerify: true,
+		cfg.InsecureSkipVerify = true
+		toAdd = true
+	}
+
+	for _, value := range opts.RegistryTLS {
+		m := parseLine(value)
+		if m["registry"] == registryName {
+			cert, err := tls.LoadX509KeyPair(m["cert"], m["key"])
+			if err != nil {
+				log.Fatal(err)
+			}
+			cfg.Certificates = []tls.Certificate{cert}
+			toAdd = true
 		}
 	}
+
+	if toAdd {
+		tr.(*http.Transport).TLSClientConfig = cfg
+	}
+
 	return tr
+}
+
+func parseLine(s string) (m map[string]string) {
+	csvReader := csv.NewReader(strings.NewReader(s))
+	m = make(map[string]string)
+
+	fields, err := csvReader.Read()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	for _, field := range fields {
+		parts := strings.SplitN(field, "=", 2)
+		key := strings.ToLower(parts[0])
+		m[key] = strings.ToLower(parts[1])
+	}
+	return
 }
 
 // pushLayerToCache pushes layer (tagged with cacheKey) to opts.Cache
